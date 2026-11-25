@@ -3,8 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AquaFeed IoT - Smart Fish Feeder ESP32</title>
+  <title>Pakan Ikan Otomatis - Dashboard IoT ESP32 & Solar</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Chart.js untuk Grafik Riwayat Pakan -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -15,131 +18,113 @@
   <div class="max-w-6xl mx-auto space-y-6">
     <!-- Top Navbar -->
     <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-900/90 border border-slate-800 p-5 rounded-2xl gap-4 shadow-lg">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-bold text-xl">
-          AF
+      <div class="flex items-center gap-3.5">
+        <div class="w-11 h-11 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-bold text-lg">
+          PI
         </div>
         <div>
-          <h1 class="text-xl font-bold text-white tracking-tight">AquaFeed <span class="text-cyan-400">IoT</span></h1>
-          <p class="text-xs text-slate-400">Sistem Manajemen & Otomasi Pakan Ikan ESP32</p>
+          <h1 class="text-xl font-bold text-white tracking-tight">Pakan Ikan <span class="text-cyan-400">Otomatis</span></h1>
+          <p class="text-xs text-slate-400">ESP32 • Load Cell HX711 • Dual Servo • Blower • Solar Panel</p>
         </div>
       </div>
       
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-2.5">
+        <button onclick="openSettingsModal()" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition flex items-center gap-1.5">
+          <span>⚙️ Setting Ikan & Panen</span>
+        </button>
         <span id="espBadge" class="px-3 py-1.5 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">
-          ESP32: Menunggu Data
+          ESP32: Offline
         </span>
         <span id="cloudBadge" class="px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-          Menghubungkan Cloud...
+          Menghubungkan...
         </span>
       </div>
     </header>
 
-    <!-- Grid Utama -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      
-      <!-- Kolom 1: Kalkulator Biologis Ikan -->
-      <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl space-y-5 shadow-lg">
-        <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-          <h2 class="font-semibold text-white">1. Parameter Biologis Ikan</h2>
-          <span class="text-xs text-cyan-400 bg-cyan-950/60 px-2.5 py-1 rounded-md border border-cyan-800/50">Auto-Dosis</span>
+    <!-- Ringkasan Status Siklus Ikan & Panel Surya -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Kartu 1: Info Budidaya Aktif -->
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow">
+        <div class="flex justify-between items-start">
+          <p class="text-xs text-slate-400 uppercase tracking-wider">Siklus Budidaya</p>
+          <span id="activeFishBadge" class="text-[11px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-medium">Lele</span>
         </div>
-
-        <div class="space-y-4">
-          <div>
-            <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1.5">Komoditas Ikan</label>
-            <select id="fishType" onchange="calculateDose()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-cyan-500 outline-none">
-              <option value="lele">Ikan Lele (Clarias sp.)</option>
-              <option value="nila">Ikan Nila (Oreochromis niloticus)</option>
-              <option value="gurame">Ikan Gurame (Osphronemus goramy)</option>
-              <option value="patin">Ikan Patin (Pangasius sp.)</option>
-            </select>
-          </div>
-
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1.5">Usia Ikan (Hari)</label>
-              <input type="number" id="fishAge" value="30" min="1" oninput="calculateDose()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-cyan-500 outline-none" />
-            </div>
-            <div>
-              <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1.5">Populasi (Ekor)</label>
-              <input type="number" id="fishCount" value="500" min="1" oninput="calculateDose()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-cyan-500 outline-none" />
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1.5">Frekuensi Pemberian Pakan</label>
-            <select id="feedFreq" onchange="calculateDose()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-cyan-500 outline-none">
-              <option value="2">2x Sehari (Pagi & Sore)</option>
-              <option value="3" selected>3x Sehari (Pagi, Siang, Malam)</option>
-              <option value="4">4x Sehari (Intensif)</option>
-            </select>
-          </div>
-
-          <!-- Ringkasan Kalkulasi -->
-          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/80 space-y-2.5 text-sm">
-            <div class="flex justify-between">
-              <span class="text-slate-400">Estimasi Bobot Rata-rata:</span>
-              <span id="avgWeightOut" class="text-slate-200 font-medium">0 g/ekor</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-400">Total Biomassa Kolam:</span>
-              <span id="biomassOut" class="text-white font-semibold">0.00 kg</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-400">Rasio Pakan (FR):</span>
-              <span id="frOut" class="text-cyan-400 font-medium">3.5%</span>
-            </div>
-            <div class="border-t border-slate-800 my-2 pt-2 flex justify-between items-center">
-              <span class="text-slate-300 font-medium">Dosis per Sesi:</span>
-              <span id="sessionOut" class="text-lg font-bold text-emerald-400">0 gram</span>
-            </div>
-            <div class="flex justify-between text-xs">
-              <span class="text-slate-500">Durasi Aktuator ESP32:</span>
-              <span id="durationOut" class="text-amber-400 font-mono">0.0 detik</span>
-            </div>
-          </div>
-
-          <button onclick="saveConfigToCloud()" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-3 rounded-xl transition shadow-md shadow-cyan-950">
-            Sinkronkan Parameter ke Cloud
-          </button>
-        </div>
+        <p id="activeAgeText" class="text-2xl font-bold text-white mt-1.5">30 Hari</p>
+        <p id="activePopText" class="text-xs text-slate-400 mt-1">Populasi: 500 Ekor (Biomassa 27.0 kg)</p>
       </div>
 
-      <!-- Kolom 2: Kontrol Eksekusi & Monitoring Tabung -->
+      <!-- Kartu 2: Target Dosis Aktif -->
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow">
+        <p class="text-xs text-slate-400 uppercase tracking-wider">Dosis per Sesi</p>
+        <p id="activeDoseText" class="text-2xl font-bold text-emerald-400 mt-1.5">315 gram</p>
+        <p id="activeFreqText" class="text-xs text-slate-400 mt-1">Jadwal 3x/hari • FR 3.5%</p>
+      </div>
+
+      <!-- Kartu 3: Daya Panel Surya & Baterai -->
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow">
+        <div class="flex justify-between items-start">
+          <p class="text-xs text-slate-400 uppercase tracking-wider">Panel Surya & Aki</p>
+          <span id="solarStatusBadge" class="text-[11px] px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800/60 font-medium">Standby</span>
+        </div>
+        <div class="flex items-baseline gap-2 mt-1.5">
+          <p id="battVoltText" class="text-2xl font-bold text-amber-400">--.- V</p>
+          <span id="battPctText" class="text-xs font-semibold text-slate-300">(--%)</span>
+        </div>
+        <p id="solarPowerText" class="text-xs text-slate-400 mt-1">Input Surya: -- V / -- W</p>
+      </div>
+
+      <!-- Kartu 4: Stok Tabung Pakan -->
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow">
+        <div class="flex justify-between items-start">
+          <p class="text-xs text-slate-400 uppercase tracking-wider">Stok Tabung (HX711)</p>
+          <span id="hopperPctBadge" class="text-xs font-bold text-cyan-400">--%</span>
+        </div>
+        <p id="hopperGramText" class="text-2xl font-bold text-white mt-1.5">-- gram</p>
+        <div class="w-full bg-slate-800 rounded-full h-2 mt-2 overflow-hidden">
+          <div id="hopperBar" class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grid Operasional Utama 3 Kolom -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- Kolom 1: Kontrol Eksekusi Manual -->
       <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col justify-between space-y-5 shadow-lg">
         <div class="space-y-5">
           <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-            <h2 class="font-semibold text-white">2. Kontrol & Tangki Pakan</h2>
-            <span class="text-xs text-emerald-400">Real-Time</span>
+            <h2 class="font-semibold text-white">1. Kontrol Pemberian Pakan</h2>
+            <span class="text-xs text-emerald-400">Aktuator Siap</span>
           </div>
 
-          <!-- Visualisasi Tangki Pakan -->
-          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
-            <div class="flex justify-between items-end">
-              <div>
-                <p class="text-xs text-slate-400">Kapasitas Silo / Tabung</p>
-                <p class="text-xs text-slate-500">Sensor Ultrasonik HC-SR04</p>
-              </div>
-              <span id="hopperText" class="text-2xl font-bold text-cyan-400">--%</span>
+          <!-- Indikator Aktuator -->
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="bg-slate-950 border border-slate-800 p-2.5 rounded-xl">
+              <p class="text-[10px] uppercase text-slate-500">Servo 1</p>
+              <p class="text-xs font-semibold text-slate-200 mt-0.5">Katup Takar</p>
             </div>
-            <div class="w-full bg-slate-800 rounded-full h-3.5 overflow-hidden">
-              <div id="hopperBar" class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-3.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+            <div class="bg-slate-950 border border-slate-800 p-2.5 rounded-xl">
+              <p class="text-[10px] uppercase text-slate-500">Servo 2</p>
+              <p class="text-xs font-semibold text-slate-200 mt-0.5">Arah Sebaran</p>
+            </div>
+            <div class="bg-slate-950 border border-slate-800 p-2.5 rounded-xl">
+              <p class="text-[10px] uppercase text-slate-500">Pelontar</p>
+              <p class="text-xs font-semibold text-slate-200 mt-0.5">Blower</p>
             </div>
           </div>
 
-          <!-- Eksekusi Dosis Otomatis -->
+          <!-- Tombol Eksekusi Dosis Otomatis -->
           <div class="space-y-2">
-            <label class="block text-xs uppercase tracking-wider text-slate-400">Eksekusi Sesuai Kalkulator</label>
-            <button id="feedBtn" onclick="triggerFeed(currentSessionGram, currentDurationSec)" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-950/60 transition flex flex-col items-center justify-center">
+            <label class="block text-xs uppercase tracking-wider text-slate-400">Eksekusi Dosis Terhitung</label>
+            <button id="feedBtn" onclick="triggerFeed(currentSessionGram, 'Manual (Dosis Auto)')" class="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-950/60 transition flex flex-col items-center justify-center">
               <span class="text-base">Beri Pakan Sekarang</span>
-              <span id="btnSubtext" class="text-xs font-normal text-emerald-100 mt-0.5">Keluarkan 0 gram (0.0 detik)</span>
+              <span id="btnSubtext" class="text-xs font-normal text-emerald-100 mt-0.5">Takar 315 gram via Load Cell + Blower</span>
             </button>
           </div>
 
-          <!-- Eksekusi Custom / Uji Coba -->
+          <!-- Eksekusi Custom -->
           <div class="pt-2 border-t border-slate-800 space-y-2">
-            <label class="block text-xs uppercase tracking-wider text-slate-400">Uji Coba Dosis Manual (Gram)</label>
+            <label class="block text-xs uppercase tracking-wider text-slate-400">Eksekusi Dosis Custom (Gram)</label>
             <div class="flex gap-2">
               <input type="number" id="customGram" value="50" min="5" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500" placeholder="Gram..." />
               <button onclick="triggerCustomFeed()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium px-4 py-2.5 rounded-xl text-sm transition whitespace-nowrap">
@@ -149,18 +134,18 @@
           </div>
         </div>
 
-        <!-- Log Status -->
+        <!-- Log Status Singkat -->
         <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
-          <p class="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Log Aktivitas Sistem</p>
+          <p class="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Status Perintah Terakhir</p>
           <p id="logText" class="text-xs text-emerald-400 font-mono">Menunggu koneksi Firebase...</p>
         </div>
       </div>
 
-      <!-- Kolom 3: Jadwal Otomatis & Riwayat -->
+      <!-- Kolom 2: Jadwal Otomatis -->
       <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col justify-between space-y-5 shadow-lg">
         <div class="space-y-4">
           <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-            <h2 class="font-semibold text-white">3. Jadwal Pakan Harian</h2>
+            <h2 class="font-semibold text-white">2. Jadwal Pakan Otomatis</h2>
             <span class="text-xs text-slate-400">WIB</span>
           </div>
 
@@ -171,14 +156,61 @@
             </button>
           </div>
 
-          <ul id="scheduleList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
-            <!-- Daftar jadwal akan muncul di sini -->
+          <ul id="scheduleList" class="space-y-2 max-h-64 overflow-y-auto pr-1">
+            <!-- Daftar jadwal otomatis dirender di sini -->
           </ul>
         </div>
 
-        <div class="bg-slate-950/70 p-4 rounded-xl border border-slate-800/80 text-xs text-slate-400 space-y-1">
-          <p class="font-semibold text-slate-300">Catatan Sinkronisasi:</p>
-          <p>Setiap perubahan jadwal dan parameter ikan otomatis tersimpan di Firebase sehingga ESP32 tetap bekerja meskipun browser ditutup.</p>
+        <div class="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/80 text-xs text-slate-400">
+          Jadwal otomatis berjalan mandiri di ESP32 menggunakan daya panel surya meskipun HP tidak membuka web ini.
+        </div>
+      </div>
+
+      <!-- Kolom 3: Grafik & Riwayat Dosis Keluar + Unduh Data -->
+      <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col justify-between space-y-4 shadow-lg">
+        <div class="space-y-4">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+            <h2 class="font-semibold text-white">3. Grafik & Riwayat Pakan</h2>
+            <div class="flex items-center gap-2">
+              <button onclick="downloadCSV()" class="text-xs bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 px-2.5 py-1 rounded-lg font-medium transition">
+                ⬇ Unduh CSV
+              </button>
+              <button onclick="clearHistory()" class="text-xs text-slate-400 hover:text-rose-400 transition">
+                Hapus
+              </button>
+            </div>
+          </div>
+
+          <!-- Grafik Dosis Keluar -->
+          <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+            <p class="text-[11px] uppercase tracking-wider text-slate-400 mb-2">Grafik Dosis Keluar (Gram)</p>
+            <div class="h-36 w-full">
+              <canvas id="feedChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Tabel Riwayat -->
+          <div class="overflow-y-auto max-h-44 pr-1">
+            <table class="w-full text-left text-xs">
+              <thead class="text-slate-400 border-b border-slate-800 sticky top-0 bg-slate-900">
+                <tr>
+                  <th class="pb-2 font-medium">Waktu</th>
+                  <th class="pb-2 font-medium">Mode</th>
+                  <th class="pb-2 font-medium text-right">Dosis</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody" class="divide-y divide-slate-800/60">
+                <tr>
+                  <td colspan="3" class="py-6 text-center text-slate-500">Belum ada riwayat pakan keluar.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between items-center text-xs">
+          <span class="text-slate-400">Total Pakan Keluar:</span>
+          <span id="totalFedOut" class="font-bold text-cyan-400 font-mono">0 gram</span>
         </div>
       </div>
 
@@ -186,9 +218,81 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- TEMPELKAN KONFIGURASI FIREBASE ANDA DI BAWAH INI                      -->
+  <!-- MODAL SETTING PARAMETER IKAN & TOMBOL PANEN (RESET)                   -->
   <!-- ===================================================================== -->
-<script>
+  <div id="settingsModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+    <div class="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-2xl p-6 space-y-5 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <div>
+          <h3 class="text-lg font-bold text-white">Pengaturan Parameter Budidaya</h3>
+          <p class="text-xs text-slate-400">Cukup diatur sekali di awal tebar benih; usia bertambah otomatis tiap hari.</p>
+        </div>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white text-xl font-bold px-2">×</button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1.5">Jenis Komoditas Ikan</label>
+          <select id="fishType" onchange="calculateDose()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-cyan-500 outline-none">
+            <option value="lele">Ikan Lele (Clarias sp.)</option>
+            <option value="nila">Ikan Nila (Oreochromis niloticus)</option>
+            <option value="gurame">Ikan Gurame (Osphronemus goramy)</option>
+            <option value="patin">Ikan Patin (Pangasius sp.)</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1.5">Usia Ikan Saat Ini (Hari)</label>
+            <input type="number" id="fishAge" value="30" min="0" oninput="calculateDose()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-cyan-500 outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1.5">Jumlah Ikan (Ekor)</label>
+            <input type="number" id="fishCount" value="500" min="0" oninput="calculateDose()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-cyan-500 outline-none" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1.5">Frekuensi Pakan per Hari</label>
+          <select id="feedFreq" onchange="calculateDose()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-cyan-500 outline-none">
+            <option value="2">2x Sehari (Pagi & Sore)</option>
+            <option value="3" selected>3x Sehari (Pagi, Siang, Malam)</option>
+            <option value="4">4x Sehari (Intensif)</option>
+          </select>
+        </div>
+
+        <!-- Preview Hasil Kalkulasi di Modal -->
+        <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs space-y-1.5">
+          <div class="flex justify-between">
+            <span class="text-slate-400">Estimasi Bobot Rata-rata:</span>
+            <span id="modalAvgWeight" class="text-slate-200 font-semibold">0 g/ekor</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">Total Biomassa Kolam:</span>
+            <span id="modalBiomass" class="text-white font-semibold">0.00 kg</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">Target Dosis per Sesi:</span>
+            <span id="modalSessionDose" class="text-emerald-400 font-bold">0 gram</span>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3 pt-2">
+          <button onclick="saveConfigAndClose()" class="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-3 rounded-xl transition">
+            Simpan Pengaturan
+          </button>
+          <button onclick="resetPanen()" class="bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 font-semibold px-4 py-3 rounded-xl transition">
+            🐟 Panen (Reset Data)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- KONFIGURASI FIREBASE (TEMPELKAN MILIK ANDA DI SINI)                   -->
+  <!-- ===================================================================== -->
+   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyCA-m3x4lcow_FdwSFUz7fGmAf46Kf9aRM",
       authDomain: "pakan-ikan-otomatis-f2592.firebaseapp.com",
@@ -203,14 +307,128 @@
     const db = firebase.database();
 
     let currentSessionGram = 0;
-    let currentDurationSec = 0;
     let schedules = ["07:00", "12:00", "17:00"];
+    let baseAgeDays = 30;
+    let startTimestamp = Date.now();
+    let historyRecords = []; // Menyimpan array riwayat untuk grafik & ekspor CSV
+    let feedChartInstance = null;
+
+    const fishNames = {
+      lele: "Ikan Lele",
+      nila: "Ikan Nila",
+      gurame: "Ikan Gurame",
+      patin: "Ikan Patin"
+    };
+
+    // Inisialisasi Grafik Chart.js
+    function initChart() {
+      const ctx = document.getElementById('feedChart').getContext('2d');
+      feedChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Dosis Pakan (gram)',
+            data: [],
+            backgroundColor: 'rgba(6, 182, 212, 0.55)',
+            borderColor: '#22d3ee',
+            borderWidth: 1.5,
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              titleColor: '#94a3b8',
+              bodyColor: '#34d399',
+              borderColor: '#334155',
+              borderWidth: 1
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 0 },
+              grid: { display: false }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { color: '#64748b', font: { size: 10 } },
+              grid: { color: 'rgba(51, 65, 85, 0.4)' }
+            }
+          }
+        }
+      });
+    }
+
+    // Update Data Grafik dari Riwayat
+    function updateChart(chronologicalItems) {
+      if (!feedChartInstance) return;
+      // Ambil maksimal 10 data terakhir agar grafik tetap terbaca jelas di HP
+      const recent = chronologicalItems.slice(-10);
+      feedChartInstance.data.labels = recent.map(item => {
+        // Ambil jam saja (misal "07:00") agar ringkas di sumbu X
+        const parts = (item.time || "").split(" ");
+        return parts.length > 1 ? parts[parts.length - 1] : (item.time || "-");
+      });
+      feedChartInstance.data.datasets[0].data = recent.map(item => parseFloat(item.gram) || 0);
+      feedChartInstance.update();
+    }
+
+    // Unduh Data Riwayat ke File CSV (Siap Buka di Excel)
+    function downloadCSV() {
+      if (!historyRecords || historyRecords.length === 0) {
+        alert("Belum ada data riwayat pakan keluar untuk diunduh.");
+        return;
+      }
+
+      // Gunakan pemisah titik koma (;) agar otomatis terpisah kolom di Excel Indonesia
+      let csvContent = "No;Waktu Pemberian;Mode Eksekusi;Berat Pakan (Gram)\n";
+      historyRecords.forEach((item, index) => {
+        const waktu = (item.time || "-").replace(/;/g, ",");
+        const mode = (item.mode || "Otomatis").replace(/;/g, ",");
+        const gram = item.gram || 0;
+        csvContent += `${index + 1};${waktu};${mode};${gram}\n`;
+      });
+
+      const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      link.setAttribute("href", url);
+      link.setAttribute("download", `Riwayat_Pakan_Ikan_${todayStr}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    // Kontrol Modal Setting
+    function openSettingsModal() {
+      document.getElementById('settingsModal').classList.remove('hidden');
+      document.getElementById('settingsModal').classList.add('flex');
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('settingsModal').classList.add('hidden');
+      document.getElementById('settingsModal').classList.remove('flex');
+    }
 
     function calculateDose() {
       const type = document.getElementById('fishType').value;
-      const age = parseFloat(document.getElementById('fishAge').value) || 1;
-      const count = parseFloat(document.getElementById('fishCount').value) || 1;
-      const freq = parseFloat(document.getElementById('feedFreq').value) || 3;
+      const age = parseInt(document.getElementById('fishAge').value) || 0;
+      const count = parseInt(document.getElementById('fishCount').value) || 0;
+      const freq = parseInt(document.getElementById('feedFreq').value) || 3;
+
+      if (age <= 0 || count <= 0) {
+        currentSessionGram = 0;
+        updateDashboardSummary(type, 0, 0, 0, 0, freq, 0);
+        return;
+      }
 
       const growthRate = { lele: 1.8, nila: 1.5, gurame: 0.9, patin: 1.7 };
       const avgWeightGram = age * (growthRate[type] || 1.5);
@@ -221,29 +439,81 @@
 
       const totalBiomassKg = (avgWeightGram * count) / 1000;
       const dailyFeedGram = totalBiomassKg * 1000 * frPercent;
-      currentSessionGram = dailyFeedGram / freq;
-      currentDurationSec = Math.max(0.5, currentSessionGram / 25);
+      currentSessionGram = Math.round(dailyFeedGram / freq);
 
-      document.getElementById('avgWeightOut').innerText = avgWeightGram.toFixed(1) + " g/ekor";
-      document.getElementById('biomassOut').innerText = totalBiomassKg.toFixed(2) + " kg";
-      document.getElementById('frOut').innerText = (frPercent * 100).toFixed(1) + "%";
-      document.getElementById('sessionOut').innerText = Math.round(currentSessionGram) + " gram";
-      document.getElementById('durationOut').innerText = currentDurationSec.toFixed(1) + " detik";
-      document.getElementById('btnSubtext').innerText = `Keluarkan ${Math.round(currentSessionGram)} gram (${currentDurationSec.toFixed(1)} detik)`;
+      updateDashboardSummary(type, age, count, avgWeightGram, totalBiomassKg, freq, frPercent);
     }
 
-    function triggerFeed(grams, duration) {
+    function updateDashboardSummary(type, age, count, avgWeight, biomassKg, freq, frPercent) {
+      document.getElementById('modalAvgWeight').innerText = avgWeight.toFixed(1) + " g/ekor";
+      document.getElementById('modalBiomass').innerText = biomassKg.toFixed(2) + " kg";
+      document.getElementById('modalSessionDose').innerText = currentSessionGram + " gram";
+
+      document.getElementById('activeFishBadge').innerText = fishNames[type] || type;
+      document.getElementById('activeAgeText').innerText = age > 0 ? `${age} Hari` : "Kolam Kosong (Panen)";
+      document.getElementById('activePopText').innerText = `Populasi: ${count} Ekor (Biomassa ${biomassKg.toFixed(1)} kg)`;
+      document.getElementById('activeDoseText').innerText = `${currentSessionGram} gram`;
+      document.getElementById('activeFreqText').innerText = `Jadwal ${freq}x/hari • FR ${(frPercent * 100).toFixed(1)}%`;
+
+      const btn = document.getElementById('feedBtn');
+      if (currentSessionGram <= 0) {
+        btn.disabled = true;
+        document.getElementById('btnSubtext').innerText = "Silakan atur usia & jumlah ikan di menu Setting";
+      } else {
+        btn.disabled = false;
+        document.getElementById('btnSubtext').innerText = `Takar ${currentSessionGram} gram via Load Cell + Blower`;
+      }
+    }
+
+    function saveConfigAndClose() {
+      baseAgeDays = parseInt(document.getElementById('fishAge').value) || 0;
+      startTimestamp = Date.now();
+      saveConfigToCloud();
+      closeSettingsModal();
+    }
+
+    function resetPanen() {
+      if (!confirm("Konfirmasi Panen: Usia ikan dan jumlah populasi akan di-reset ke 0 (kolam kosong). Lanjutkan?")) return;
+      
+      document.getElementById('fishAge').value = 0;
+      document.getElementById('fishCount').value = 0;
+      baseAgeDays = 0;
+      startTimestamp = Date.now();
+      calculateDose();
+      saveConfigToCloud();
+      closeSettingsModal();
+      document.getElementById('logText').innerText = "[PANEN] Siklus selesai. Parameter usia & jumlah di-reset ke 0.";
+    }
+
+    function saveConfigToCloud() {
+      db.ref('feeder/config').set({
+        fish_type: document.getElementById('fishType').value,
+        age_days: parseInt(document.getElementById('fishAge').value) || 0,
+        base_age_days: baseAgeDays,
+        start_timestamp: startTimestamp,
+        fish_count: parseInt(document.getElementById('fishCount').value) || 0,
+        freq_per_day: parseInt(document.getElementById('feedFreq').value) || 3,
+        session_gram: currentSessionGram,
+        schedules: schedules
+      }).then(() => {
+        document.getElementById('logText').innerText = "[SYNC] Pengaturan & jadwal tersimpan di Cloud!";
+      });
+    }
+
+    function triggerFeed(grams, modeLabel = "Manual") {
+      if (grams <= 0) return;
       const btn = document.getElementById('feedBtn');
       btn.disabled = true;
 
       db.ref('feeder/command').set({
         feed_now: true,
         target_gram: Math.round(grams),
-        duration_sec: parseFloat(duration.toFixed(1)),
+        mode: modeLabel,
         timestamp: Date.now()
       }).then(() => {
-        document.getElementById('logText').innerText = `[OK] Perintah ${Math.round(grams)}g (${duration.toFixed(1)}s) dikirim!`;
-        setTimeout(() => { btn.disabled = false; }, 1500);
+        document.getElementById('logText').innerText = `[OK] Perintah takar ${Math.round(grams)}g dikirim ke ESP32!`;
+        logFeedHistory(Math.round(grams), modeLabel);
+        setTimeout(() => { if (currentSessionGram > 0) btn.disabled = false; }, 1500);
       }).catch((err) => {
         document.getElementById('logText').innerText = "[ERR] " + err.message;
         btn.disabled = false;
@@ -252,8 +522,25 @@
 
     function triggerCustomFeed() {
       const customG = parseFloat(document.getElementById('customGram').value) || 25;
-      const customDur = Math.max(0.5, customG / 25);
-      triggerFeed(customG, customDur);
+      triggerFeed(customG, "Manual Custom");
+    }
+
+    function logFeedHistory(grams, mode) {
+      const now = new Date();
+      const timeStr = now.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) + " " +
+                      now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      db.ref('feeder/history').push({
+        time: timeStr,
+        mode: mode,
+        gram: grams,
+        timestamp: Date.now()
+      });
+    }
+
+    function clearHistory() {
+      if (confirm("Hapus semua catatan riwayat dosis keluar?")) {
+        db.ref('feeder/history').remove();
+      }
     }
 
     function renderSchedules() {
@@ -284,34 +571,107 @@
       saveConfigToCloud();
     }
 
-    function saveConfigToCloud() {
-      db.ref('feeder/config').set({
-        fish_type: document.getElementById('fishType').value,
-        age_days: parseInt(document.getElementById('fishAge').value),
-        fish_count: parseInt(document.getElementById('fishCount').value),
-        freq_per_day: parseInt(document.getElementById('feedFreq').value),
-        session_gram: Math.round(currentSessionGram),
-        duration_sec: parseFloat(currentDurationSec.toFixed(1)),
-        schedules: schedules
-      }).then(() => {
-        document.getElementById('logText').innerText = "[SYNC] Parameter & jadwal tersimpan di Cloud!";
-      });
-    }
-
-    // Load data tersimpan dari Firebase saat halaman dibuka
+    // Muat Konfigurasi dari Firebase
     db.ref('feeder/config').once('value').then((snap) => {
       const cfg = snap.val();
       if (cfg) {
         if (cfg.fish_type) document.getElementById('fishType').value = cfg.fish_type;
-        if (cfg.age_days) document.getElementById('fishAge').value = cfg.age_days;
-        if (cfg.fish_count) document.getElementById('fishCount').value = cfg.fish_count;
+        if (cfg.fish_count !== undefined) document.getElementById('fishCount').value = cfg.fish_count;
         if (cfg.freq_per_day) document.getElementById('feedFreq').value = cfg.freq_per_day;
         if (cfg.schedules) schedules = cfg.schedules;
+
+        baseAgeDays = cfg.base_age_days !== undefined ? cfg.base_age_days : (cfg.age_days || 0);
+        startTimestamp = cfg.start_timestamp || Date.now();
+
+        let currentAge = baseAgeDays;
+        if (baseAgeDays > 0 && cfg.fish_count > 0) {
+          const elapsedDays = Math.floor((Date.now() - startTimestamp) / (1000 * 60 * 60 * 24));
+          currentAge = baseAgeDays + Math.max(0, elapsedDays);
+        }
+        document.getElementById('fishAge').value = currentAge;
+
         calculateDose();
         renderSchedules();
       }
     });
 
+    // Pantau Riwayat Dosis Keluar Secara Real-Time (Untuk Tabel, Grafik & Unduh CSV)
+    db.ref('feeder/history').limitToLast(100).on('value', (snap) => {
+      const tbody = document.getElementById('historyTableBody');
+      const val = snap.val();
+      if (!val) {
+        historyRecords = [];
+        updateChart([]);
+        tbody.innerHTML = `<tr><td colspan="3" class="py-6 text-center text-slate-500">Belum ada riwayat pakan keluar.</td></tr>`;
+        document.getElementById('totalFedOut').innerText = "0 gram";
+        return;
+      }
+
+      const chronologicalItems = Object.values(val);
+      historyRecords = [...chronologicalItems].reverse(); // Terbaru di paling atas untuk tabel & CSV
+      
+      // Perbarui Grafik (urut kronologis lama -> baru)
+      updateChart(chronologicalItems);
+
+      let totalGram = 0;
+      tbody.innerHTML = "";
+
+      historyRecords.forEach((item) => {
+        totalGram += (parseFloat(item.gram) || 0);
+        const badgeColor = (item.mode || "").includes("Jadwal") ? "text-cyan-400" : "text-emerald-400";
+        tbody.innerHTML += `
+          <tr>
+            <td class="py-2 text-slate-300 font-mono">${item.time || "-"}</td>
+            <td class="py-2 ${badgeColor}">${item.mode || "Otomatis"}</td>
+            <td class="py-2 text-right font-bold text-white font-mono">${item.gram} g</td>
+          </tr>
+        `;
+      });
+
+      document.getElementById('totalFedOut').innerText = `${totalGram.toLocaleString('id-ID')} gram`;
+    });
+
+    // Pantau Telemetri ESP32 (Stok Pakan HX711 + Panel Surya & Baterai)
+    db.ref('feeder/telemetry').on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        if (data.hopper_percent !== undefined) {
+          document.getElementById('hopperPctBadge').innerText = data.hopper_percent + "%";
+          document.getElementById('hopperBar').style.width = data.hopper_percent + "%";
+        }
+        if (data.hopper_gram !== undefined) {
+          document.getElementById('hopperGramText').innerText = Math.round(data.hopper_gram) + " gram";
+        }
+
+        if (data.battery_volt !== undefined) {
+          document.getElementById('battVoltText').innerText = parseFloat(data.battery_volt).toFixed(1) + " V";
+          const pct = Math.min(100, Math.max(0, Math.round(((data.battery_volt - 11.5) / (12.8 - 11.5)) * 100)));
+          document.getElementById('battPctText').innerText = `(${pct}%)`;
+        }
+        if (data.solar_volt !== undefined || data.solar_watt !== undefined) {
+          const sVolt = data.solar_volt !== undefined ? parseFloat(data.solar_volt).toFixed(1) : "--";
+          const sWatt = data.solar_watt !== undefined ? parseFloat(data.solar_watt).toFixed(1) : "--";
+          document.getElementById('solarPowerText').innerText = `Input Surya: ${sVolt} V / ${sWatt} W`;
+          
+          const sBadge = document.getElementById('solarStatusBadge');
+          if (parseFloat(data.solar_volt) > 13.0 || parseFloat(data.solar_watt) > 1.0) {
+            sBadge.className = "text-[11px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60 font-medium";
+            sBadge.innerText = "⚡ Charging";
+          } else {
+            sBadge.className = "text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-medium";
+            sBadge.innerText = "Mode Baterai";
+          }
+        }
+
+        if (data.online) {
+          const esp = document.getElementById('espBadge');
+          esp.className = "px-3 py-1.5 rounded-full text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30";
+          esp.innerText = "ESP32: Online";
+        }
+      }
+    });
+
+    // Status Koneksi Cloud
     db.ref('.info/connected').on('value', (snap) => {
       const badge = document.getElementById('cloudBadge');
       if (snap.val() === true) {
@@ -323,21 +683,7 @@
       }
     });
 
-    db.ref('feeder/telemetry').on('value', (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        if (data.hopper_percent !== undefined) {
-          document.getElementById('hopperText').innerText = data.hopper_percent + "%";
-          document.getElementById('hopperBar').style.width = data.hopper_percent + "%";
-        }
-        if (data.online) {
-          const esp = document.getElementById('espBadge');
-          esp.className = "px-3 py-1.5 rounded-full text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30";
-          esp.innerText = "ESP32: Online";
-        }
-      }
-    });
-
+    initChart();
     calculateDose();
     renderSchedules();
   </script>
