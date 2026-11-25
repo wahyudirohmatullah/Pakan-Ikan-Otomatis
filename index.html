@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AquaFeed IoT - Smart Fish Feeder ESP32</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans p-4 md:p-8">
+
+  <div class="max-w-6xl mx-auto space-y-6">
+    <!-- Top Navbar -->
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-900/90 border border-slate-800 p-5 rounded-2xl gap-4 shadow-lg">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-bold text-xl">
+          AF
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-white tracking-tight">AquaFeed <span class="text-cyan-400">IoT</span></h1>
+          <p class="text-xs text-slate-400">Sistem Manajemen & Otomasi Pakan Ikan ESP32</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-3">
+        <span id="espBadge" class="px-3 py-1.5 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">
+          ESP32: Menunggu Data
+        </span>
+        <span id="cloudBadge" class="px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+          Menghubungkan Cloud...
+        </span>
+      </div>
+    </header>
+
+    <!-- Grid Utama -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- Kolom 1: Kalkulator Biologis Ikan -->
+      <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl space-y-5 shadow-lg">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+          <h2 class="font-semibold text-white">1. Parameter Biologis Ikan</h2>
+          <span class="text-xs text-cyan-400 bg-cyan-950/60 px-2.5 py-1 rounded-md border border-cyan-800/50">Auto-Dosis</span>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1.5">Komoditas Ikan</label>
+            <select id="fishType" onchange="calculateDose()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-cyan-500 outline-none">
+              <option value="lele">Ikan Lele (Clarias sp.)</option>
+              <option value="nila">Ikan Nila (Oreochromis niloticus)</option>
+              <option value="gurame">Ikan Gurame (Osphronemus goramy)</option>
+              <option value="patin">Ikan Patin (Pangasius sp.)</option>
+            </select>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1.5">Usia Ikan (Hari)</label>
+              <input type="number" id="fishAge" value="30" min="1" oninput="calculateDose()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-cyan-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1.5">Populasi (Ekor)</label>
+              <input type="number" id="fishCount" value="500" min="1" oninput="calculateDose()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-cyan-500 outline-none" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs uppercase tracking-wider text-slate-400 mb-1.5">Frekuensi Pemberian Pakan</label>
+            <select id="feedFreq" onchange="calculateDose()" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:border-cyan-500 outline-none">
+              <option value="2">2x Sehari (Pagi & Sore)</option>
+              <option value="3" selected>3x Sehari (Pagi, Siang, Malam)</option>
+              <option value="4">4x Sehari (Intensif)</option>
+            </select>
+          </div>
+
+          <!-- Ringkasan Kalkulasi -->
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/80 space-y-2.5 text-sm">
+            <div class="flex justify-between">
+              <span class="text-slate-400">Estimasi Bobot Rata-rata:</span>
+              <span id="avgWeightOut" class="text-slate-200 font-medium">0 g/ekor</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Total Biomassa Kolam:</span>
+              <span id="biomassOut" class="text-white font-semibold">0.00 kg</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Rasio Pakan (FR):</span>
+              <span id="frOut" class="text-cyan-400 font-medium">3.5%</span>
+            </div>
+            <div class="border-t border-slate-800 my-2 pt-2 flex justify-between items-center">
+              <span class="text-slate-300 font-medium">Dosis per Sesi:</span>
+              <span id="sessionOut" class="text-lg font-bold text-emerald-400">0 gram</span>
+            </div>
+            <div class="flex justify-between text-xs">
+              <span class="text-slate-500">Durasi Aktuator ESP32:</span>
+              <span id="durationOut" class="text-amber-400 font-mono">0.0 detik</span>
+            </div>
+          </div>
+
+          <button onclick="saveConfigToCloud()" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-3 rounded-xl transition shadow-md shadow-cyan-950">
+            Sinkronkan Parameter ke Cloud
+          </button>
+        </div>
+      </div>
+
+      <!-- Kolom 2: Kontrol Eksekusi & Monitoring Tabung -->
+      <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col justify-between space-y-5 shadow-lg">
+        <div class="space-y-5">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+            <h2 class="font-semibold text-white">2. Kontrol & Tangki Pakan</h2>
+            <span class="text-xs text-emerald-400">Real-Time</span>
+          </div>
+
+          <!-- Visualisasi Tangki Pakan -->
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+            <div class="flex justify-between items-end">
+              <div>
+                <p class="text-xs text-slate-400">Kapasitas Silo / Tabung</p>
+                <p class="text-xs text-slate-500">Sensor Ultrasonik HC-SR04</p>
+              </div>
+              <span id="hopperText" class="text-2xl font-bold text-cyan-400">--%</span>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-3.5 overflow-hidden">
+              <div id="hopperBar" class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-3.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+          </div>
+
+          <!-- Eksekusi Dosis Otomatis -->
+          <div class="space-y-2">
+            <label class="block text-xs uppercase tracking-wider text-slate-400">Eksekusi Sesuai Kalkulator</label>
+            <button id="feedBtn" onclick="triggerFeed(currentSessionGram, currentDurationSec)" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-950/60 transition flex flex-col items-center justify-center">
+              <span class="text-base">Beri Pakan Sekarang</span>
+              <span id="btnSubtext" class="text-xs font-normal text-emerald-100 mt-0.5">Keluarkan 0 gram (0.0 detik)</span>
+            </button>
+          </div>
+
+          <!-- Eksekusi Custom / Uji Coba -->
+          <div class="pt-2 border-t border-slate-800 space-y-2">
+            <label class="block text-xs uppercase tracking-wider text-slate-400">Uji Coba Dosis Manual (Gram)</label>
+            <div class="flex gap-2">
+              <input type="number" id="customGram" value="50" min="5" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500" placeholder="Gram..." />
+              <button onclick="triggerCustomFeed()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium px-4 py-2.5 rounded-xl text-sm transition whitespace-nowrap">
+                Kirim Manual
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Log Status -->
+        <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+          <p class="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Log Aktivitas Sistem</p>
+          <p id="logText" class="text-xs text-emerald-400 font-mono">Menunggu koneksi Firebase...</p>
+        </div>
+      </div>
+
+      <!-- Kolom 3: Jadwal Otomatis & Riwayat -->
+      <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col justify-between space-y-5 shadow-lg">
+        <div class="space-y-4">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+            <h2 class="font-semibold text-white">3. Jadwal Pakan Harian</h2>
+            <span class="text-xs text-slate-400">WIB</span>
+          </div>
+
+          <div class="flex gap-2">
+            <input type="time" id="newScheduleTime" value="07:00" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-cyan-500" />
+            <button onclick="addSchedule()" class="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">
+              + Tambah
+            </button>
+          </div>
+
+          <ul id="scheduleList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+            <!-- Daftar jadwal akan muncul di sini -->
+          </ul>
+        </div>
+
+        <div class="bg-slate-950/70 p-4 rounded-xl border border-slate-800/80 text-xs text-slate-400 space-y-1">
+          <p class="font-semibold text-slate-300">Catatan Sinkronisasi:</p>
+          <p>Setiap perubahan jadwal dan parameter ikan otomatis tersimpan di Firebase sehingga ESP32 tetap bekerja meskipun browser ditutup.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- TEMPELKAN KONFIGURASI FIREBASE ANDA DI BAWAH INI                      -->
+  <!-- ===================================================================== -->
+<script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCA-m3x4lcow_FdwSFUz7fGmAf46Kf9aRM",
+      authDomain: "pakan-ikan-otomatis-f2592.firebaseapp.com",
+      databaseURL: "https://pakan-ikan-otomatis-f2592-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "pakan-ikan-otomatis-f2592",
+      storageBucket: "pakan-ikan-otomatis-f2592.firebasestorage.app",
+      messagingSenderId: "454764848082",
+      appId: "1:454764848082:web:5fb0ecdc41946ed2595e0b"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let currentSessionGram = 0;
+    let currentDurationSec = 0;
+    let schedules = ["07:00", "12:00", "17:00"];
+
+    function calculateDose() {
+      const type = document.getElementById('fishType').value;
+      const age = parseFloat(document.getElementById('fishAge').value) || 1;
+      const count = parseFloat(document.getElementById('fishCount').value) || 1;
+      const freq = parseFloat(document.getElementById('feedFreq').value) || 3;
+
+      const growthRate = { lele: 1.8, nila: 1.5, gurame: 0.9, patin: 1.7 };
+      const avgWeightGram = age * (growthRate[type] || 1.5);
+      
+      let frPercent = 0.05;
+      if (age > 60) frPercent = 0.025;
+      else if (age > 30) frPercent = 0.035;
+
+      const totalBiomassKg = (avgWeightGram * count) / 1000;
+      const dailyFeedGram = totalBiomassKg * 1000 * frPercent;
+      currentSessionGram = dailyFeedGram / freq;
+      currentDurationSec = Math.max(0.5, currentSessionGram / 25);
+
+      document.getElementById('avgWeightOut').innerText = avgWeightGram.toFixed(1) + " g/ekor";
+      document.getElementById('biomassOut').innerText = totalBiomassKg.toFixed(2) + " kg";
+      document.getElementById('frOut').innerText = (frPercent * 100).toFixed(1) + "%";
+      document.getElementById('sessionOut').innerText = Math.round(currentSessionGram) + " gram";
+      document.getElementById('durationOut').innerText = currentDurationSec.toFixed(1) + " detik";
+      document.getElementById('btnSubtext').innerText = `Keluarkan ${Math.round(currentSessionGram)} gram (${currentDurationSec.toFixed(1)} detik)`;
+    }
+
+    function triggerFeed(grams, duration) {
+      const btn = document.getElementById('feedBtn');
+      btn.disabled = true;
+
+      db.ref('feeder/command').set({
+        feed_now: true,
+        target_gram: Math.round(grams),
+        duration_sec: parseFloat(duration.toFixed(1)),
+        timestamp: Date.now()
+      }).then(() => {
+        document.getElementById('logText').innerText = `[OK] Perintah ${Math.round(grams)}g (${duration.toFixed(1)}s) dikirim!`;
+        setTimeout(() => { btn.disabled = false; }, 1500);
+      }).catch((err) => {
+        document.getElementById('logText').innerText = "[ERR] " + err.message;
+        btn.disabled = false;
+      });
+    }
+
+    function triggerCustomFeed() {
+      const customG = parseFloat(document.getElementById('customGram').value) || 25;
+      const customDur = Math.max(0.5, customG / 25);
+      triggerFeed(customG, customDur);
+    }
+
+    function renderSchedules() {
+      const listEl = document.getElementById('scheduleList');
+      listEl.innerHTML = "";
+      schedules.sort().forEach((time, index) => {
+        listEl.innerHTML += `
+          <li class="flex justify-between items-center bg-slate-950 px-4 py-2.5 rounded-xl border border-slate-800">
+            <span class="font-mono text-sm text-cyan-300 font-semibold">${time} WIB</span>
+            <button onclick="removeSchedule(${index})" class="text-xs text-rose-400 hover:text-rose-300">Hapus</button>
+          </li>
+        `;
+      });
+    }
+
+    function addSchedule() {
+      const val = document.getElementById('newScheduleTime').value;
+      if (val && !schedules.includes(val)) {
+        schedules.push(val);
+        renderSchedules();
+        saveConfigToCloud();
+      }
+    }
+
+    function removeSchedule(idx) {
+      schedules.splice(idx, 1);
+      renderSchedules();
+      saveConfigToCloud();
+    }
+
+    function saveConfigToCloud() {
+      db.ref('feeder/config').set({
+        fish_type: document.getElementById('fishType').value,
+        age_days: parseInt(document.getElementById('fishAge').value),
+        fish_count: parseInt(document.getElementById('fishCount').value),
+        freq_per_day: parseInt(document.getElementById('feedFreq').value),
+        session_gram: Math.round(currentSessionGram),
+        duration_sec: parseFloat(currentDurationSec.toFixed(1)),
+        schedules: schedules
+      }).then(() => {
+        document.getElementById('logText').innerText = "[SYNC] Parameter & jadwal tersimpan di Cloud!";
+      });
+    }
+
+    // Load data tersimpan dari Firebase saat halaman dibuka
+    db.ref('feeder/config').once('value').then((snap) => {
+      const cfg = snap.val();
+      if (cfg) {
+        if (cfg.fish_type) document.getElementById('fishType').value = cfg.fish_type;
+        if (cfg.age_days) document.getElementById('fishAge').value = cfg.age_days;
+        if (cfg.fish_count) document.getElementById('fishCount').value = cfg.fish_count;
+        if (cfg.freq_per_day) document.getElementById('feedFreq').value = cfg.freq_per_day;
+        if (cfg.schedules) schedules = cfg.schedules;
+        calculateDose();
+        renderSchedules();
+      }
+    });
+
+    db.ref('.info/connected').on('value', (snap) => {
+      const badge = document.getElementById('cloudBadge');
+      if (snap.val() === true) {
+        badge.className = "px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
+        badge.innerText = "Cloud Terhubung";
+      } else {
+        badge.className = "px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/30";
+        badge.innerText = "Cloud Terputus";
+      }
+    });
+
+    db.ref('feeder/telemetry').on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        if (data.hopper_percent !== undefined) {
+          document.getElementById('hopperText').innerText = data.hopper_percent + "%";
+          document.getElementById('hopperBar').style.width = data.hopper_percent + "%";
+        }
+        if (data.online) {
+          const esp = document.getElementById('espBadge');
+          esp.className = "px-3 py-1.5 rounded-full text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30";
+          esp.innerText = "ESP32: Online";
+        }
+      }
+    });
+
+    calculateDose();
+    renderSchedules();
+  </script>
+</body>
+</html>
